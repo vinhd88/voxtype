@@ -10,6 +10,7 @@ final class HotkeyManager: ObservableObject {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var isKeyDown = false
+    private var pollTimer: Timer?
 
     // Default hold-to-talk key: Right Option
     // KeyCode 61 = Right Option on macOS
@@ -19,7 +20,7 @@ final class HotkeyManager: ObservableObject {
     private static let axPromptOption = "AXTrustedCheckOptionPrompt" as CFString
 
     init() {
-        installEventTap()
+        installEventTapOrPoll()
     }
 
     deinit {
@@ -28,13 +29,24 @@ final class HotkeyManager: ObservableObject {
 
     // MARK: - CGEvent Tap (Hold-to-Talk)
 
-    private func installEventTap() {
-        // Check accessibility permission first (no prompt)
-        guard AXIsProcessTrusted() else {
-            print("[Hotkey] Accessibility not granted. Hold-to-talk requires Accessibility permission.")
-            print("[Hotkey] Please grant in System Settings → Privacy & Security → Accessibility")
-            return
+    /// Try installing event tap; if accessibility not granted, poll every second until it is.
+    private func installEventTapOrPoll() {
+        if AXIsProcessTrusted() {
+            installEventTap()
+        } else {
+            print("[Hotkey] Waiting for accessibility permission...")
+            pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+                guard let self else { return }
+                if AXIsProcessTrusted() {
+                    self.pollTimer?.invalidate()
+                    self.pollTimer = nil
+                    self.installEventTap()
+                }
+            }
         }
+    }
+
+    private func installEventTap() {
 
         let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
             | (1 << CGEventType.keyUp.rawValue)
@@ -96,7 +108,7 @@ final class HotkeyManager: ObservableObject {
         }
 
         switch type {
-        case .keyDown, .flagsChanged:
+        case .keyDown:
             if !isKeyDown {
                 isKeyDown = true
                 print("[Hotkey] Key DOWN")
@@ -106,6 +118,18 @@ final class HotkeyManager: ObservableObject {
             if isKeyDown {
                 isKeyDown = false
                 print("[Hotkey] Key UP")
+                keyReleased.send()
+            }
+        case .flagsChanged:
+            // Modifier keys (Option, Cmd, etc.) use flagsChanged for both press and release
+            let isOptionPressed = event.flags.contains(.maskAlternate)
+            if isOptionPressed && !isKeyDown {
+                isKeyDown = true
+                print("[Hotkey] Key DOWN (flagsChanged)")
+                keyPressed.send()
+            } else if !isOptionPressed && isKeyDown {
+                isKeyDown = false
+                print("[Hotkey] Key UP (flagsChanged)")
                 keyReleased.send()
             }
         default:

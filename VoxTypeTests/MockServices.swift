@@ -1,6 +1,6 @@
 import AVFoundation
 import Combine
-@testable import VoiceInput
+@testable import VoxType
 
 /// Mock audio service that simulates recording without hardware.
 class MockAudioCaptureService: AudioCaptureService {
@@ -16,15 +16,15 @@ class MockAudioCaptureService: AudioCaptureService {
 
     override func stopRecording() -> AVAudioPCMBuffer {
         if let stub = stubBuffer { return stub }
-        // Return a valid 100ms silence buffer at 16kHz mono
+        // Return 500ms silence buffer at 16kHz mono (above min transcription threshold)
         let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: 16000,
             channels: 1,
             interleaved: false
         )!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1600)!
-        buffer.frameLength = 1600
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 8000)!
+        buffer.frameLength = 8000
         return buffer
     }
 }

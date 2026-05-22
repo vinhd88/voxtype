@@ -1,7 +1,7 @@
 import AVFoundation
 import Combine
 import XCTest
-@testable import VoiceInput
+@testable import VoxType
 
 @MainActor
 final class DictationManagerTests: XCTestCase {
@@ -57,11 +57,23 @@ final class DictationManagerTests: XCTestCase {
         XCTAssertEqual(manager.state, .listening)
     }
 
-    func testStartDoesNothingWhenNotIdle() async {
+    func testStartDoesNothingWhenAlreadyListening() async {
         await pressKey()
         XCTAssertEqual(manager.state, .listening)
+        // Pressing again while listening should be ignored
         await pressKey()
         XCTAssertEqual(manager.state, .listening)
+    }
+
+    func testStartInterruptsTranscription() async throws {
+        await pressKey()
+        await releaseKey()
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        // State should be .transcribing (mock transcription is instant but Task scheduling takes time)
+        // Press again should interrupt and restart
+        await pressKey()
+        XCTAssertEqual(manager.state, .listening, "Re-press during transcription should restart recording")
     }
 
     func testStartErrorsWhenModelNotReady() async {
@@ -180,7 +192,26 @@ final class DictationManagerTests: XCTestCase {
         XCTAssertEqual(manager.state, .idle)
     }
 
-    func testEmptyAudioBufferShowsError() async throws {
+    func testShortAudioBufferReturnsToIdle() async throws {
+        // Buffers below 4800 frames (0.3s) should silently return to idle
+        let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16000,
+            channels: 1,
+            interleaved: false
+        )!
+        let shortBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1600)!
+        shortBuffer.frameLength = 1600
+        audio.stubBuffer = shortBuffer
+
+        await pressKey()
+        await releaseKey()
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(manager.state, .idle, "Short audio should return to idle without error")
+    }
+
+    func testEmptyAudioBufferReturnsToIdle() async throws {
         let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: 16000,
@@ -195,7 +226,7 @@ final class DictationManagerTests: XCTestCase {
         await releaseKey()
 
         try await Task.sleep(nanoseconds: 200_000_000)
-        XCTAssertEqual(manager.state, .error(message: "No audio captured"))
+        XCTAssertEqual(manager.state, .idle, "Empty audio should return to idle without error")
     }
 
     // MARK: - Auto Reset

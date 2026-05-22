@@ -8,7 +8,7 @@ class TranscriptionService: ObservableObject {
     @Published private(set) var modelStatus: ModelStatus = .notLoaded
 
     private var whisperKit: WhisperKit?
-    private let modelName = "large-v3-turbo"
+    private let modelName = "openai_whisper-base"
 
     enum ModelStatus: Equatable {
         case notLoaded

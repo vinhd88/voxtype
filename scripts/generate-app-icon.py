@@ -1,5 +1,5 @@
 """
-Generate macOS app icon for Voice Input AI.
+Generate macOS app icon for VoxType.
 Outputs all required sizes for AppIcon.appiconset.
 Run once: python3 scripts/generate-app-icon.py
 """
@@ -12,13 +12,13 @@ from PIL import Image, ImageDraw, ImageFilter
 
 # --- Config ---
 SIZE = 1024
-BG_COLOR_TOP = (79, 142, 247)       # #4F8EF7 blue
-BG_COLOR_BOT = (108, 92, 231)       # #6C5CE7 indigo
+BG_COLOR_TOP = (15, 32, 65)         # #0F2041 deep navy
+BG_COLOR_BOT = (30, 60, 120)        # #1E3C78 rich blue
 MIC_COLOR = (255, 255, 255)
 WAVE_COLOR = (255, 255, 255)
 WAVE_OPACITY = [180, 130, 80]       # decreasing opacity for each wave
 
-OUTPUT_DIR = Path(__file__).parent.parent / "VoiceInput" / "Assets.xcassets" / "AppIcon.appiconset"
+OUTPUT_DIR = Path(__file__).parent.parent / "VoxType" / "Assets.xcassets" / "AppIcon.appiconset"
 
 # macOS squircle corner ratio (approximation of continuous curvature)
 CORNER_RATIO = 0.2235  # ~229/1024

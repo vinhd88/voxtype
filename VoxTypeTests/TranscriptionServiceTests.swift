@@ -1,6 +1,6 @@
 import AVFoundation
 import XCTest
-@testable import VoiceInput
+@testable import VoxType
 
 @MainActor
 final class TranscriptionServiceTests: XCTestCase {

@@ -1,5 +1,5 @@
 import XCTest
-@testable import VoiceInput
+@testable import VoxType
 
 final class DictationStateTests: XCTestCase {
 

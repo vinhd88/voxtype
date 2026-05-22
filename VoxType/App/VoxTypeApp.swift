@@ -2,7 +2,7 @@ import Combine
 import SwiftUI
 
 @main
-struct VoiceInputApp: App {
+struct VoxTypeApp: App {
     @StateObject private var appController = AppController()
 
     var body: some Scene {
@@ -32,6 +32,11 @@ final class AppController: ObservableObject {
             textService: textService,
             hotkeyManager: hotkey
         )
+
+        // Prompt for accessibility if not granted (shows system dialog)
+        if !hotkey.hasAccessibility {
+            hotkey.requestAccessibility()
+        }
 
         wireUI()
 

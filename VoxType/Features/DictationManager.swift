@@ -15,6 +15,10 @@ final class DictationManager: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var resetTask: Task<Void, Never>?
+    private var transcriptionTask: Task<Void, Never>?
+
+    // Minimum frames to attempt transcription (0.3s at 16kHz)
+    private let minFramesForTranscription: AVAudioFrameCount = 4800
 
     init(
         audioService: AudioCaptureService,
@@ -45,7 +49,18 @@ final class DictationManager: ObservableObject {
     // MARK: - State Transitions
 
     private func startDictation() {
-        guard state == .idle else { return }
+        // Allow interrupting transcription — user wants to dictate something new
+        if state == .transcribing {
+            transcriptionTask?.cancel()
+            transcriptionTask = nil
+            // Ensure any in-flight recording is cleaned up
+            if audioService.isCurrentlyRecording {
+                _ = audioService.stopRecording()
+            }
+        }
+
+        // Allow starting from any non-listening state
+        guard state != .listening else { return }
 
         // Check transcription readiness
         guard transcriptionService.isReady else {
@@ -62,6 +77,8 @@ final class DictationManager: ObservableObject {
             return
         }
 
+        resetTask?.cancel()
+
         do {
             try audioService.startRecording()
             state = .listening
@@ -76,16 +93,16 @@ final class DictationManager: ObservableObject {
 
         let audioBuffer = audioService.stopRecording()
 
-        // Skip transcription if no audio was captured (e.g. very brief key press)
-        guard audioBuffer.frameLength > 0 else {
-            state = .error(message: "No audio captured")
-            scheduleReset()
+        // Skip if audio too short — accidental tap, not intentional speech
+        guard audioBuffer.frameLength >= minFramesForTranscription else {
+            print("[Dictation] Audio too short (\(audioBuffer.frameLength) frames), skipping transcription")
+            state = .idle
             return
         }
 
         state = .transcribing
 
-        Task {
+        transcriptionTask = Task {
             await transcribeAndInsert(audioBuffer)
         }
     }
@@ -95,6 +112,7 @@ final class DictationManager: ObservableObject {
 
         do {
             let text = try await transcriptionService.transcribe(audio)
+            guard !Task.isCancelled else { return }
             let t1 = ContinuousClock.now
 
             guard !text.isEmpty else {
@@ -104,6 +122,7 @@ final class DictationManager: ObservableObject {
             }
 
             let result = await textService.insertText(text)
+            guard !Task.isCancelled else { return }
             let t2 = ContinuousClock.now
 
             let transcriptionDuration = t0.duration(to: t1)
@@ -121,6 +140,7 @@ final class DictationManager: ObservableObject {
                 state = .done(text: "(Copy failed: \(msg)) \(text)")
             }
         } catch {
+            guard !Task.isCancelled else { return }
             state = .error(message: "Transcription failed: \(error.localizedDescription)")
         }
 

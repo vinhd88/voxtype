@@ -1,6 +1,6 @@
 import AppKit
 import XCTest
-@testable import VoiceInput
+@testable import VoxType
 
 final class TextInsertionServiceTests: XCTestCase {
 

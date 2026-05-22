@@ -11,6 +11,10 @@ class AudioCaptureService: ObservableObject {
     private var engine: AVAudioEngine?
     private var _isRecording = false
 
+    var isCurrentlyRecording: Bool {
+        bufferQueue.sync { _isRecording }
+    }
+
     private var isRecording: Bool {
         get { bufferQueue.sync { _isRecording } }
         set { bufferQueue.sync { _isRecording = newValue } }
