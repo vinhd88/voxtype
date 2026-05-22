@@ -18,10 +18,22 @@ final class HUDPanel: NSPanel {
         hasShadow = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         isReleasedWhenClosed = false
+        minSize = NSSize(width: 200, height: 40)
+        maxSize = NSSize(width: 400, height: 80)
     }
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+}
+
+// MARK: - HUD State
+
+/// Observable state shared with the persistent NSHostingView.
+@MainActor
+@Observable
+final class HUDState {
+    var state: DictationState = .idle
+    var audioLevel: Float = 0.0
 }
 
 // MARK: - HUD Controller
@@ -30,6 +42,7 @@ final class HUDPanel: NSPanel {
 @MainActor
 final class HUDController {
     private var panel: HUDPanel?
+    private let hudState = HUDState()
 
     func show(state: DictationState, audioLevel: Float) {
         if state == .idle {
@@ -37,23 +50,27 @@ final class HUDController {
             return
         }
 
-        let p = panel ?? createPanel()
-        let view = HUDContentView(state: state, audioLevel: audioLevel)
-            .environment(\.colorScheme, .dark)
+        hudState.state = state
+        hudState.audioLevel = audioLevel
 
-        p.contentView = NSHostingView(rootView: view)
+        let p: HUDPanel
+        if let existing = panel {
+            p = existing
+        } else {
+            p = createPanel()
+            let view = HUDContentView()
+                .environment(hudState)
+                .environment(\.colorScheme, .dark)
+            p.contentView = NSHostingView(rootView: view)
+        }
         p.orderFrontRegardless()
         positionNearMenuBar(p)
     }
 
     func updateAudioLevel(_ level: Float) {
         guard let panel = panel, panel.isVisible else { return }
-        // Re-render with updated audio level
-        let currentState = (panel.contentView as? NSHostingView<HUDContentView>)?.rootView.state ?? .idle
-        if currentState == .listening {
-            let view = HUDContentView(state: currentState, audioLevel: level)
-                .environment(\.colorScheme, .dark)
-            panel.contentView = NSHostingView(rootView: view)
+        if hudState.state == .listening {
+            hudState.audioLevel = level
         }
     }
 
@@ -79,14 +96,16 @@ final class HUDController {
 // MARK: - HUD SwiftUI Content
 
 struct HUDContentView: View {
-    let state: DictationState
-    let audioLevel: Float
+    @Environment(HUDState.self) private var hudState
 
     var body: some View {
+        let state = hudState.state
+        let audioLevel = hudState.audioLevel
+
         HStack(spacing: 10) {
-            icon
+            icon(for: state)
             VStack(alignment: .leading, spacing: 2) {
-                label
+                label(for: state)
                 if state == .listening {
                     AudioLevelBar(level: audioLevel)
                 }
@@ -106,6 +125,7 @@ struct HUDContentView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .fixedSize()
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
@@ -114,7 +134,7 @@ struct HUDContentView: View {
         )
     }
 
-    @ViewBuilder private var icon: some View {
+    @ViewBuilder private func icon(for state: DictationState) -> some View {
         switch state {
         case .listening:
             Image(systemName: "mic.fill")
@@ -136,7 +156,7 @@ struct HUDContentView: View {
         }
     }
 
-    @ViewBuilder private var label: some View {
+    @ViewBuilder private func label(for state: DictationState) -> some View {
         switch state {
         case .listening:
             Text("Listening...")
