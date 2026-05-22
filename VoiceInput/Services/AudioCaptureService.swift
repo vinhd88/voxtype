@@ -3,7 +3,7 @@ import Combine
 
 /// Captures microphone audio, converts to 16kHz mono PCM for WhisperKit.
 /// macOS does not use AVAudioSession — audio engine is started directly.
-final class AudioCaptureService: ObservableObject {
+class AudioCaptureService: ObservableObject {
     @Published private(set) var audioLevel: Float = 0.0
 
     private let bufferQueue = DispatchQueue(label: "com.voiceinput.audiobuffer")

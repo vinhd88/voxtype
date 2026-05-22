@@ -17,6 +17,27 @@ packages:
     url: https://github.com/argmaxinc/WhisperKit.git
     from: "0.15.0"
 targets:
+  VoiceInputTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: VoiceInputTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.voiceinput.tests
+        SWIFT_STRICT_CONCURRENCY: minimal
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+      configs:
+        debug:
+          CODE_SIGN_IDENTITY: "-"
+          CODE_SIGN_STYLE: Automatic
+        release:
+          CODE_SIGN_IDENTITY: "-"
+          CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - target: VoiceInput
+
   VoiceInput:
     type: application
     platform: macOS

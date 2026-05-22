@@ -4,7 +4,7 @@ import WhisperKit
 
 /// Manages WhisperKit model lifecycle and transcription.
 @MainActor
-final class TranscriptionService: ObservableObject {
+class TranscriptionService: ObservableObject {
     @Published private(set) var modelStatus: ModelStatus = .notLoaded
 
     private var whisperKit: WhisperKit?

@@ -2,8 +2,8 @@ import AppKit
 import CoreGraphics
 
 /// Inserts transcribed text into the active app via clipboard + Cmd+V.
-final class TextInsertionService {
-    enum InsertionResult {
+class TextInsertionService {
+    enum InsertionResult: Equatable {
         case success
         case clipboardOnly
         case failed(String)
