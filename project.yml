@@ -1,0 +1,53 @@
+name: VoiceInput
+options:
+  bundleIdPrefix: com.voiceinput
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  minimumXcodeGenVersion: "2.42"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+packages:
+  WhisperKit:
+    url: https://github.com/argmaxinc/WhisperKit.git
+    from: "0.15.0"
+targets:
+  VoiceInput:
+    type: application
+    platform: macOS
+    sources:
+      - path: VoiceInput
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.voiceinput.app
+        INFOPLIST_FILE: VoiceInput/Resources/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: VoiceInput/Resources/VoiceInput.entitlements
+        SWIFT_STRICT_CONCURRENCY: minimal
+        SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      configs:
+        debug:
+          CODE_SIGN_IDENTITY: "-"
+          CODE_SIGN_STYLE: Automatic
+        release:
+          CODE_SIGN_IDENTITY: "-"
+          CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - package: WhisperKit
+        product: WhisperKit
+    entitlements:
+      path: VoiceInput/Resources/VoiceInput.entitlements
+      properties:
+        com.apple.security.device.audio-input: true
+    info:
+      path: VoiceInput/Resources/Info.plist
+      properties:
+        LSUIElement: true
+        NSMicrophoneUsageDescription: "Voice Input needs microphone access for speech-to-text dictation."
+        CFBundleDisplayName: "Voice Input"
+        CFBundleShortVersionString: "0.1.0"
