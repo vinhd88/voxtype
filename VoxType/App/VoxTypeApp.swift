@@ -1,8 +1,16 @@
 import Combine
 import SwiftUI
 
+/// Prevents app termination when all windows close — menu bar app pattern.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return false
+    }
+}
+
 @main
 struct VoxTypeApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var settingsStore = SettingsStore()
     @StateObject private var appController: AppController
 
@@ -17,6 +25,7 @@ struct VoxTypeApp: App {
             SettingsView()
                 .environmentObject(settingsStore)
                 .environmentObject(appController.transcriptionService)
+                .onAppear { NSApp.activate(ignoringOtherApps: true) }
         }
         .windowResizability(.contentSize)
 
@@ -53,6 +62,7 @@ final class AppController: ObservableObject {
 
     init(settings: SettingsStore) {
         self.settings = settings
+        transcriptionService.configure(settings: settings)
         self.menuBarController = MenuBarController(transcriptionService: transcriptionService)
 
         let hotkey = HotkeyManager(settings: settings)

@@ -47,13 +47,8 @@ final class MenuBarController: NSObject {
         // If model failed, add open settings action
         if case .failed = transcriptionService?.modelStatus {
             let retryItem = NSMenuItem()
-            let retryLink = NSHostingView(
-                rootView: SettingsLink {
-                    Text("Open Settings to Fix...")
-                        .font(.system(size: 13))
-                }
-            )
-            retryLink.frame = NSRect(x: 0, y: 0, width: 200, height: 24)
+            let retryLink = NSHostingView(rootView: SettingsLink { Text("Open Settings to Fix...").font(.system(size: 13)) })
+            retryLink.frame = NSRect(x: 0, y: 0, width: 240, height: 22)
             retryItem.view = retryLink
             menu.addItem(retryItem)
         }
@@ -62,13 +57,19 @@ final class MenuBarController: NSObject {
 
         // Settings — use SettingsLink to properly open SwiftUI Settings scene
         let settingsItem = NSMenuItem()
-        let settingsLink = NSHostingView(
-            rootView: SettingsLink {
+        let settingsView = SettingsLink {
+            HStack {
                 Text("Settings...")
                     .font(.system(size: 13))
+                Spacer()
+                Text("⌘,")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
             }
-        )
-        settingsLink.frame = NSRect(x: 0, y: 0, width: 200, height: 24)
+            .padding(.horizontal, 4)
+        }
+        let settingsLink = NSHostingView(rootView: settingsView)
+        settingsLink.frame = NSRect(x: 0, y: 0, width: 240, height: 22)
         settingsItem.view = settingsLink
         menu.addItem(settingsItem)
 
