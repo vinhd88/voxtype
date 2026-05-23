@@ -16,6 +16,7 @@ struct VoxTypeApp: App {
         Settings {
             SettingsView()
                 .environmentObject(settingsStore)
+                .environmentObject(appController.transcriptionService)
         }
         .windowResizability(.contentSize)
 
@@ -35,7 +36,7 @@ struct VoxTypeApp: App {
 final class AppController: ObservableObject {
     private let settings: SettingsStore
     private let audioService = AudioCaptureService()
-    private let transcriptionService = TranscriptionService()
+    private(set) var transcriptionService = TranscriptionService()
     private let textService = TextInsertionService()
     private(set) var hotkeyManager: HotkeyManager!
     private(set) var dictationManager: DictationManager!
@@ -72,9 +73,12 @@ final class AppController: ObservableObject {
 
         wireUI()
 
-        // Kick off model preparation in background
-        Task {
-            await transcriptionService.prepareModel()
+        // Auto-load model only if onboarding already completed
+        // (first launch: onboarding controls model download)
+        if settings.hasCompletedOnboarding {
+            Task {
+                await transcriptionService.prepareModel(named: settings.selectedModel)
+            }
         }
     }
 
@@ -96,8 +100,20 @@ final class AppController: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Rebuild menu when model status changes
+        // Rebuild menu when model status or download progress changes
         transcriptionService.$modelStatus
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                self?.menuBarController.rebuildMenu()
+                // Update icon when idle — model status affects idle icon
+                if self?.dictationManager.state == .idle {
+                    self?.menuBarController.updateIcon(for: .idle)
+                }
+            }
+            .store(in: &cancellables)
+
+        transcriptionService.$downloadProgress
+            .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.menuBarController.rebuildMenu()

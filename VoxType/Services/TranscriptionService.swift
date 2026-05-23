@@ -2,13 +2,61 @@ import AVFoundation
 import Combine
 import WhisperKit
 
+// MARK: - Model Catalog
+
+/// Available WhisperKit speech recognition models.
+struct WhisperModel: Identifiable, Hashable {
+    let id: String
+    let displayName: String
+    let sizeLabel: String
+    let description: String
+    let iconName: String
+    let tier: Int
+
+    static let catalog: [WhisperModel] = [
+        WhisperModel(
+            id: "openai_whisper-tiny",
+            displayName: "Whisper Tiny",
+            sizeLabel: "~75 MB",
+            description: "Fastest, good for quick notes",
+            iconName: "bolt.fill",
+            tier: 0
+        ),
+        WhisperModel(
+            id: "openai_whisper-base",
+            displayName: "Whisper Base",
+            sizeLabel: "~150 MB",
+            description: "Balanced speed and accuracy",
+            iconName: "scope",
+            tier: 1
+        ),
+        WhisperModel(
+            id: "openai_whisper-large-v3_turbo",
+            displayName: "Whisper Large Turbo",
+            sizeLabel: "~800 MB",
+            description: "Best accuracy, recommended",
+            iconName: "star.fill",
+            tier: 2
+        ),
+    ]
+
+    static let defaultModel = catalog[2] // Large Turbo — best accuracy
+
+    static func find(byId id: String) -> WhisperModel? {
+        catalog.first { $0.id == id }
+    }
+}
+
+// MARK: - TranscriptionService
+
 /// Manages WhisperKit model lifecycle and transcription.
 @MainActor
 class TranscriptionService: ObservableObject {
     @Published private(set) var modelStatus: ModelStatus = .notLoaded
+    @Published private(set) var downloadProgress: Double = 0.0
 
     private var whisperKit: WhisperKit?
-    private let modelName = "openai_whisper-base"
+    private(set) var currentModelId: String = WhisperModel.defaultModel.id
 
     enum ModelStatus: Equatable {
         case notLoaded
@@ -18,38 +66,39 @@ class TranscriptionService: ObservableObject {
         case failed(String)
     }
 
-    private var lastReportedPercent = -1
+    /// Download and load a WhisperKit model. No-op if the same model is already ready.
+    func prepareModel(named modelId: String? = nil) async {
+        let targetId = modelId ?? WhisperModel.defaultModel.id
 
-    /// Download and load the WhisperKit model. Call once on app launch.
-    func prepareModel() async {
-        guard modelStatus != .ready && modelStatus != .loading && modelStatus != .downloading else { return }
+        guard modelStatus != .ready || currentModelId != targetId else { return }
+        guard modelStatus != .loading && modelStatus != .downloading else { return }
+
+        currentModelId = targetId
 
         do {
-            // Phase 1: Download with progress (no-op if already cached)
             modelStatus = .downloading
-            lastReportedPercent = -1
+            downloadProgress = 0.0
+
             let modelFolder = try await WhisperKit.download(
-                variant: modelName,
+                variant: targetId,
                 progressCallback: { [weak self] progress in
                     guard progress.totalUnitCount > 0 else { return }
-                    let pct = Int(Double(progress.completedUnitCount) / Double(progress.totalUnitCount) * 100)
-                    guard pct != self?.lastReportedPercent else { return }
-                    self?.lastReportedPercent = pct
-                    print("[Transcription] Download: \(pct)%")
+                    let fraction = Double(progress.completedUnitCount) / Double(progress.totalUnitCount)
+                    Task { @MainActor [weak self] in
+                        self?.downloadProgress = fraction
+                    }
                 }
             )
 
-            // Phase 2: Load from local folder (first-time CoreML compilation can take a few minutes)
             modelStatus = .loading
-            print("[Transcription] Loading model (first run may compile CoreML — this takes a few minutes)...")
+            downloadProgress = 1.0
+
             let config = WhisperKitConfig(modelFolder: modelFolder.path)
             let kit = try await WhisperKit(config)
             self.whisperKit = kit
             modelStatus = .ready
-            print("[Transcription] Model ready: \(modelName)")
         } catch {
             modelStatus = .failed(error.localizedDescription)
-            print("[Transcription] Model preparation failed: \(error)")
         }
     }
 
@@ -59,7 +108,6 @@ class TranscriptionService: ObservableObject {
             throw TranscriptionError.modelNotReady
         }
 
-        // Write PCM to temp WAV file — WhisperKit's file-based API is most reliable
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("voiceinput_\(UUID().uuidString).wav")
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -87,20 +135,17 @@ class TranscriptionService: ObservableObject {
 
         let data = Data(bytes: channelData, count: Int(dataSize))
 
-        // Build WAV header + data
         var wav = Data()
         let sampleRate = Int32(format.sampleRate)
         let channels = Int32(format.channelCount)
-        let bitsPerSample = Int32(32) // Float32
+        let bitsPerSample = Int32(32)
 
-        // RIFF header
         wav.append(contentsOf: "RIFF".utf8)
         wav.append(contentsOf: withUnsafeBytes(of: UInt32(36 + data.count).littleEndian) { Array($0) })
         wav.append(contentsOf: "WAVE".utf8)
-        // fmt chunk
         wav.append(contentsOf: "fmt ".utf8)
         wav.append(contentsOf: withUnsafeBytes(of: UInt32(16).littleEndian) { Array($0) })
-        wav.append(contentsOf: withUnsafeBytes(of: UInt16(3).littleEndian) { Array($0) }) // IEEE float
+        wav.append(contentsOf: withUnsafeBytes(of: UInt16(3).littleEndian) { Array($0) })
         wav.append(contentsOf: withUnsafeBytes(of: UInt16(channels).littleEndian) { Array($0) })
         wav.append(contentsOf: withUnsafeBytes(of: sampleRate.littleEndian) { Array($0) })
         let byteRate = sampleRate * channels * bitsPerSample / 8
@@ -108,7 +153,6 @@ class TranscriptionService: ObservableObject {
         let blockAlign = UInt16(channels * bitsPerSample / 8)
         wav.append(contentsOf: withUnsafeBytes(of: blockAlign.littleEndian) { Array($0) })
         wav.append(contentsOf: withUnsafeBytes(of: UInt16(bitsPerSample).littleEndian) { Array($0) })
-        // data chunk
         wav.append(contentsOf: "data".utf8)
         wav.append(contentsOf: withUnsafeBytes(of: UInt32(data.count).littleEndian) { Array($0) })
         wav.append(data)

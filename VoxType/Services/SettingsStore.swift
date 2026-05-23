@@ -23,6 +23,9 @@ final class SettingsStore: ObservableObject {
     // Onboarding
     @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding: Bool = false
 
+    // Model selection
+    @AppStorage("selectedModel") var selectedModel: String = WhisperModel.defaultModel.id
+
     // Computed: human-readable hotkey name
     var hotkeyDisplayName: String {
         let keyCode = CGKeyCode(hotkeyKeyCode)

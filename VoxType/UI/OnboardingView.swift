@@ -43,7 +43,7 @@ struct OnboardingView: View {
                 .disabled(!controller.canProceed)
             }
         }
-        .frame(width: 480, height: 360)
+        .frame(width: 520, height: 420)
         .padding(24)
     }
 
@@ -111,29 +111,62 @@ struct OnboardingView: View {
 
     private var modelStep: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Speech Model")
+            Text("Choose a Speech Model")
                 .font(.title2)
                 .fontWeight(.bold)
-            Text("VoxType downloads a speech recognition model on first launch (~1.5GB).")
+            Text("Select the model that fits your needs. Larger models are more accurate.")
                 .font(.body)
                 .foregroundStyle(.secondary)
 
-            HStack {
+            // Model selection cards
+            HStack(spacing: 10) {
+                ForEach(WhisperModel.catalog) { model in
+                    ModelCardView(
+                        model: model,
+                        isSelected: controller.selectedModel == model,
+                        isDownloaded: controller.modelStatus == .ready && controller.selectedModel == model
+                    ) {
+                        guard controller.modelStatus != .downloading && controller.modelStatus != .loading else { return }
+                        controller.selectedModel = model
+                    }
+                }
+            }
+
+            // Download button + progress
+            Group {
                 switch controller.modelStatus {
                 case .notLoaded:
-                    Text("Waiting...")
-                case .loading, .downloading:
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Loading model...")
+                    Button("Download \(controller.selectedModel.displayName)") {
+                        controller.downloadModel()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                case .downloading, .loading:
+                    DownloadProgressView(
+                        progress: controller.downloadProgress,
+                        status: controller.modelStatus
+                    )
+
                 case .ready:
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                    Text("Model ready")
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("\(controller.selectedModel.displayName) is ready to go!")
+                            .font(.subheadline)
+                            .foregroundStyle(.green)
+                    }
+
                 case .failed(let msg):
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.red)
-                    Text(msg)
+                    VStack(spacing: 8) {
+                        DownloadProgressView(
+                            progress: controller.downloadProgress,
+                            status: controller.modelStatus
+                        )
+                        Button("Retry Download") {
+                            controller.retryDownload()
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
             }
         }
@@ -146,7 +179,7 @@ struct OnboardingView: View {
             Text("Try It Out")
                 .font(.title2)
                 .fontWeight(.bold)
-            Text("Hold the Right Option key and say something. Your words will appear in any text field.")
+            Text("Hold the **\(settings.hotkeyDisplayName)** key and say something. Your words will appear in any text field.")
                 .font(.body)
                 .foregroundStyle(.secondary)
             Text("You can change the hotkey later in Settings (Cmd+,).")

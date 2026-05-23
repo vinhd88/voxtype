@@ -19,7 +19,8 @@ final class MenuBarController {
     func updateIcon(for state: DictationState) {
         let (symbol, description): (String, String) = switch state {
         case .idle:
-            ("mic", "VoxType")
+            // Show model-ready state when idle
+            modelIdleSymbol()
         case .listening:
             ("mic.fill", "VoxType — Listening")
         case .transcribing:
@@ -40,6 +41,16 @@ final class MenuBarController {
         let statusItem = NSMenuItem(title: statusTitle, action: nil, keyEquivalent: "")
         statusItem.isEnabled = false
         menu.addItem(statusItem)
+
+        // If model failed, add open settings action
+        if case .failed = transcriptionService?.modelStatus {
+            let retryItem = NSMenuItem(
+                title: "Open Settings to Fix...",
+                action: #selector(openSettings),
+                keyEquivalent: ""
+            )
+            menu.addItem(retryItem)
+        }
 
         menu.addItem(NSMenuItem.separator())
 
@@ -85,13 +96,38 @@ final class MenuBarController {
         )
     }
 
+    // MARK: - Icon Helpers
+
+    /// Returns the appropriate mic symbol for idle state based on model readiness.
+    private func modelIdleSymbol() -> (String, String) {
+        switch transcriptionService?.modelStatus {
+        case .ready:
+            return ("mic.fill", "VoxType — Ready")
+        case .downloading:
+            return ("mic.badge.xmark", "VoxType — Downloading Model")
+        case .loading:
+            return ("mic.badge.xmark", "VoxType — Loading Model")
+        case .failed:
+            return ("mic", "VoxType — Model Error")
+        default:
+            return ("mic", "VoxType")
+        }
+    }
+
     private var modelStatusText: String {
         switch transcriptionService?.modelStatus {
-        case .ready: "Model: Ready"
-        case .downloading: "Model: Downloading..."
-        case .loading: "Model: Loading..."
-        case .failed: "Model: Failed"
-        default: "Model: Not Loaded"
+        case .ready:
+            let name = WhisperModel.find(byId: transcriptionService?.currentModelId ?? "")?.displayName ?? "Model"
+            return "\(name): Ready ✓"
+        case .downloading:
+            let pct = Int((transcriptionService?.downloadProgress ?? 0) * 100)
+            return "Model: Downloading \(pct)%"
+        case .loading:
+            return "Model: Loading..."
+        case .failed:
+            return "Model: Failed"
+        default:
+            return "Model: Not Loaded"
         }
     }
 }

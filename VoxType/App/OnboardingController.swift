@@ -23,7 +23,7 @@ enum PermissionState {
     }
 }
 
-/// Manages the 5-step first-run onboarding flow.
+/// Manages the first-run onboarding flow with model download.
 @MainActor
 final class OnboardingController: ObservableObject {
     @Published var step = 1
@@ -31,6 +31,8 @@ final class OnboardingController: ObservableObject {
     @Published var micPermission: PermissionState = .mic()
     @Published var accessibilityPermission: PermissionState = .accessibility()
     @Published var modelStatus: TranscriptionService.ModelStatus = .notLoaded
+    @Published var selectedModel: WhisperModel = WhisperModel.defaultModel
+    @Published var downloadProgress: Double = 0.0
 
     private let settings: SettingsStore
     private let audioService: AudioCaptureService
@@ -43,10 +45,17 @@ final class OnboardingController: ObservableObject {
         self.audioService = audioService
         self.transcriptionService = transcriptionService
 
-        // Observe model status
         transcriptionService.$modelStatus
             .receive(on: DispatchQueue.main)
             .assign(to: &$modelStatus)
+
+        transcriptionService.$downloadProgress
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$downloadProgress)
+
+        if let saved = WhisperModel.find(byId: settings.selectedModel) {
+            selectedModel = saved
+        }
 
         updateCanProceed()
     }
@@ -54,6 +63,7 @@ final class OnboardingController: ObservableObject {
     func next() {
         if step == 5 {
             settings.hasCompletedOnboarding = true
+            settings.selectedModel = selectedModel.id
         } else {
             step += 1
             updateCanProceed()
@@ -80,6 +90,18 @@ final class OnboardingController: ObservableObject {
         startAccessibilityPolling()
     }
 
+    /// Start downloading the selected model.
+    func downloadModel() {
+        Task {
+            await transcriptionService.prepareModel(named: selectedModel.id)
+        }
+    }
+
+    /// Retry download after failure.
+    func retryDownload() {
+        downloadModel()
+    }
+
     private func startAccessibilityPolling() {
         accessibilityPollTimer?.invalidate()
         accessibilityPollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -98,8 +120,7 @@ final class OnboardingController: ObservableObject {
 
     private func updateCanProceed() {
         switch step {
-        case 2: canProceed = true // Mic step always proceedable
-        case 3: canProceed = true // Accessibility step always proceedable
+        case 4: canProceed = modelStatus == .ready
         default: canProceed = true
         }
     }

@@ -7,6 +7,8 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gear") }
             HotkeySettingsView()
                 .tabItem { Label("Hotkey", systemImage: "keyboard") }
+            ModelSettingsView()
+                .tabItem { Label("Model", systemImage: "waveform") }
             AdvancedSettingsView()
                 .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
         }
@@ -92,6 +94,128 @@ struct HotkeySettingsView: View {
                 .foregroundStyle(.secondary)
         }
         .padding()
+    }
+}
+
+// MARK: - Model Tab
+
+struct ModelSettingsView: View {
+    @EnvironmentObject var settings: SettingsStore
+    @EnvironmentObject var transcriptionService: TranscriptionService
+    @State private var switchingModel: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Current model status
+            GroupBox("Current Model") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(WhisperModel.find(byId: transcriptionService.currentModelId)?.displayName ?? transcriptionService.currentModelId)
+                            .font(.headline)
+                        modelStatusLabel
+                    }
+                    Spacer()
+                }
+                .padding(4)
+            }
+
+            // Available models
+            GroupBox("Available Models") {
+                VStack(spacing: 8) {
+                    ForEach(WhisperModel.catalog) { model in
+                        modelRow(model)
+                    }
+                }
+                .padding(4)
+            }
+
+            // Progress during download
+            if case .downloading = transcriptionService.modelStatus {
+                DownloadProgressView(
+                    progress: transcriptionService.downloadProgress,
+                    status: transcriptionService.modelStatus
+                )
+            }
+
+            Spacer()
+
+            Text("Switching models requires downloading. The current model stays active until the new one is ready.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+    }
+
+    @ViewBuilder
+    private var modelStatusLabel: some View {
+        switch transcriptionService.modelStatus {
+        case .ready:
+            Label("Ready", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.caption)
+        case .downloading:
+            Label("Downloading \(Int(transcriptionService.downloadProgress * 100))%", systemImage: "arrow.down.circle")
+                .foregroundStyle(Color.accentColor)
+                .font(.caption)
+        case .loading:
+            Label("Preparing...", systemImage: "gear")
+                .foregroundStyle(.secondary)
+                .font(.caption)
+        case .failed:
+            Label("Failed", systemImage: "xmark.circle.fill")
+                .foregroundStyle(.red)
+                .font(.caption)
+        case .notLoaded:
+            Label("Not downloaded", systemImage: "arrow.down.circle")
+                .foregroundStyle(.secondary)
+                .font(.caption)
+        }
+    }
+
+    @ViewBuilder
+    private func modelRow(_ model: WhisperModel) -> some View {
+        let isActive = transcriptionService.currentModelId == model.id && transcriptionService.modelStatus == .ready
+        let isCurrent = transcriptionService.currentModelId == model.id
+
+        HStack {
+            Image(systemName: model.iconName)
+                .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.displayName)
+                    .font(.body)
+                Text("\(model.sizeLabel) — \(model.description)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if isActive {
+                Text("Active")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            } else if isCurrent && (transcriptionService.modelStatus == .downloading || transcriptionService.modelStatus == .loading) {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Button("Switch") {
+                    switchTo(model)
+                }
+                .disabled(transcriptionService.modelStatus == .downloading || transcriptionService.modelStatus == .loading)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func switchTo(_ model: WhisperModel) {
+        settings.selectedModel = model.id
+        Task {
+            await transcriptionService.prepareModel(named: model.id)
+        }
     }
 }
 
