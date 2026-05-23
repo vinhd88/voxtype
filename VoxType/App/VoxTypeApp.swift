@@ -37,6 +37,13 @@ final class AppController: ObservableObject {
     private let settings: SettingsStore
     private let audioService = AudioCaptureService()
     private(set) var transcriptionService = TranscriptionService()
+
+    /// Whether the app is running under XCTest.
+    static let isRunningTests: Bool = {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.arguments.contains("-XCTest")
+            || NSClassFromString("XCTestCase") != nil
+    }()
     private let textService = TextInsertionService()
     private(set) var hotkeyManager: HotkeyManager!
     private(set) var dictationManager: DictationManager!
@@ -57,8 +64,8 @@ final class AppController: ObservableObject {
             hotkeyManager: hotkey
         )
 
-        // Prompt for accessibility if not granted (shows system dialog)
-        if !hotkey.hasAccessibility {
+        // Prompt for accessibility if not granted (skip during tests)
+        if !hotkey.hasAccessibility && !Self.isRunningTests {
             hotkey.requestAccessibility()
         }
 
