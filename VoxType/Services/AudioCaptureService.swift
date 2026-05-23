@@ -6,10 +6,18 @@ import Combine
 class AudioCaptureService: ObservableObject {
     @Published private(set) var audioLevel: Float = 0.0
 
+    /// Fires when silence has been detected for the configured timeout duration.
+    let silenceDetected = PassthroughSubject<Void, Never>()
+
     private let bufferQueue = DispatchQueue(label: "com.voiceinput.audiobuffer")
     private var pcmBuffers: [AVAudioPCMBuffer] = []
     private var engine: AVAudioEngine?
     private var _isRecording = false
+
+    // Silence detection state
+    private var silenceFrameCount: Int = 0
+    private var silenceThreshold: Float = 0.02
+    private var silenceFrameLimit: Int = 24000 // 1.5s at 16kHz
 
     var isCurrentlyRecording: Bool {
         bufferQueue.sync { _isRecording }
@@ -57,6 +65,12 @@ class AudioCaptureService: ObservableObject {
 
         bufferQueue.sync { pcmBuffers.removeAll() }
 
+        // Configure silence detection from settings
+        let timeout = UserDefaults.standard.double(forKey: "silenceTimeout")
+        silenceFrameLimit = Int(max(timeout, 0.5) * 16000)
+        silenceThreshold = 0.02
+        silenceFrameCount = 0
+
         // nonisolated class to capture weak self for the audio tap callback
         // @unchecked Sendable: safe because all shared state access is through bufferQueue or main queue
         final class TapHandler: @unchecked Sendable {
@@ -78,8 +92,22 @@ class AudioCaptureService: ObservableObject {
                     var sum: Float = 0
                     for i in 0..<frameCount { sum += channelData[i] * channelData[i] }
                     let rms = sqrt(sum / Float(max(frameCount, 1)))
+
                     DispatchQueue.main.async {
                         service.audioLevel = min(rms * 5.0, 1.0)
+                    }
+
+                    // Silence detection: count consecutive silent frames
+                    if rms < service.silenceThreshold {
+                        service.silenceFrameCount += frameCount
+                        if service.silenceFrameCount >= service.silenceFrameLimit {
+                            service.silenceFrameCount = 0
+                            DispatchQueue.main.async {
+                                service.silenceDetected.send()
+                            }
+                        }
+                    } else {
+                        service.silenceFrameCount = 0
                     }
                 }
 

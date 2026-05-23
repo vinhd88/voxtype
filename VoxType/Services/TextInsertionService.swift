@@ -15,11 +15,13 @@ class TextInsertionService {
 
         // Save previous clipboard content
         let previousContent = pasteboard.string(forType: .string)
-        let previousChangeCount = pasteboard.changeCount
 
         // Write text to clipboard
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+
+        // Capture changeCount AFTER writing — this is our baseline
+        let ourChangeCount = pasteboard.changeCount
 
         // Brief delay to ensure clipboard is written
         try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
@@ -31,8 +33,8 @@ class TextInsertionService {
         if let previous = previousContent {
             Task {
                 try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
-                if pasteboard.changeCount != previousChangeCount {
-                    // Only restore if clipboard hasn't been changed again by user
+                // If changeCount still matches, no one else wrote to clipboard
+                if pasteboard.changeCount == ourChangeCount {
                     pasteboard.clearContents()
                     pasteboard.setString(previous, forType: .string)
                 }

@@ -8,7 +8,7 @@ class TranscriptionService: ObservableObject {
     @Published private(set) var modelStatus: ModelStatus = .notLoaded
 
     private var whisperKit: WhisperKit?
-    private let modelName = "openai_whisper-base"
+    private let modelName = "openai_whisper-large-v3_turbo"
 
     enum ModelStatus: Equatable {
         case notLoaded
@@ -20,7 +20,7 @@ class TranscriptionService: ObservableObject {
 
     /// Download and load the WhisperKit model. Call once on app launch.
     func prepareModel() async {
-        guard modelStatus != .ready else { return }
+        guard modelStatus != .ready && modelStatus != .loading else { return }
 
         do {
             modelStatus = .loading

@@ -44,6 +44,17 @@ final class DictationManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.stopDictation() }
             .store(in: &cancellables)
+
+        // Silence detection: auto-stop when user stops speaking
+        audioService.silenceDetected
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in
+                guard let self, self.state == .listening else { return }
+                let enabled = UserDefaults.standard.bool(forKey: "silenceDetectionEnabled")
+                guard enabled else { return }
+                self.stopDictation()
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - State Transitions
@@ -107,7 +118,7 @@ final class DictationManager: ObservableObject {
         }
     }
 
-    private func transcribeAndInsert(_ audio: AVAudioPCMBuffer) async {
+    private func transcribeAndInsert(_ audio: AVAudioPCMBuffer, retryCount: Int = 0) async {
         let t0 = ContinuousClock.now
 
         do {
@@ -141,10 +152,30 @@ final class DictationManager: ObservableObject {
             }
         } catch {
             guard !Task.isCancelled else { return }
-            state = .error(message: "Transcription failed: \(error.localizedDescription)")
+
+            if retryCount == 0 {
+                print("[Dictation] Transcription failed, retrying... (\(error))")
+                try? await Task.sleep(nanoseconds: 200_000_000) // 200ms backoff
+                guard !Task.isCancelled else { return }
+                await transcribeAndInsert(audio, retryCount: 1)
+                return
+            }
+
+            state = .error(message: "Transcription failed. \(suggestedAction(for: error))")
         }
 
         scheduleReset()
+    }
+
+    private func suggestedAction(for error: Error) -> String {
+        if let err = error as? TranscriptionError {
+            switch err {
+            case .modelNotReady: return "Wait for model to finish loading."
+            case .invalidAudio: return "Try speaking louder or closer to the mic."
+            case .emptyResult: return "No speech was detected. Try again."
+            }
+        }
+        return "Try again or check your microphone."
     }
 
     private func scheduleReset() {

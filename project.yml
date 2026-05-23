@@ -71,4 +71,4 @@ targets:
         LSUIElement: true
         NSMicrophoneUsageDescription: "VoxType needs microphone access for speech-to-text dictation."
         CFBundleDisplayName: "VoxType"
-        CFBundleShortVersionString: "0.1.0"
+        CFBundleShortVersionString: "1.0.0"
