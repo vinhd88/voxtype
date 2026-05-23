@@ -10,7 +10,7 @@ struct SettingsView: View {
             AdvancedSettingsView()
                 .tabItem { Label("Advanced", systemImage: "wrench.and.screwdriver") }
         }
-        .frame(width: 450)
+        .frame(width: 450, height: 300)
     }
 }
 

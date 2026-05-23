@@ -17,6 +17,7 @@ struct VoxTypeApp: App {
             SettingsView()
                 .environmentObject(settingsStore)
         }
+        .windowResizability(.contentSize)
 
         Window("Welcome to VoxType", id: "onboarding") {
             if let controller = appController.onboardingController {
@@ -92,6 +93,14 @@ final class AppController: ObservableObject {
             .sink { [weak self] level in
                 guard let self, self.dictationManager.state == .listening else { return }
                 self.hudController.updateAudioLevel(level)
+            }
+            .store(in: &cancellables)
+
+        // Rebuild menu when model status changes
+        transcriptionService.$modelStatus
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.menuBarController.rebuildMenu()
             }
             .store(in: &cancellables)
     }

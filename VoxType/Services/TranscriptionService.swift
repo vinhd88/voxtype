@@ -8,7 +8,7 @@ class TranscriptionService: ObservableObject {
     @Published private(set) var modelStatus: ModelStatus = .notLoaded
 
     private var whisperKit: WhisperKit?
-    private let modelName = "openai_whisper-large-v3_turbo"
+    private let modelName = "openai_whisper-base"
 
     enum ModelStatus: Equatable {
         case notLoaded
@@ -18,14 +18,31 @@ class TranscriptionService: ObservableObject {
         case failed(String)
     }
 
+    private var lastReportedPercent = -1
+
     /// Download and load the WhisperKit model. Call once on app launch.
     func prepareModel() async {
-        guard modelStatus != .ready && modelStatus != .loading else { return }
+        guard modelStatus != .ready && modelStatus != .loading && modelStatus != .downloading else { return }
 
         do {
-            modelStatus = .loading
+            // Phase 1: Download with progress (no-op if already cached)
+            modelStatus = .downloading
+            lastReportedPercent = -1
+            let modelFolder = try await WhisperKit.download(
+                variant: modelName,
+                progressCallback: { [weak self] progress in
+                    guard progress.totalUnitCount > 0 else { return }
+                    let pct = Int(Double(progress.completedUnitCount) / Double(progress.totalUnitCount) * 100)
+                    guard pct != self?.lastReportedPercent else { return }
+                    self?.lastReportedPercent = pct
+                    print("[Transcription] Download: \(pct)%")
+                }
+            )
 
-            let config = WhisperKitConfig(model: modelName)
+            // Phase 2: Load from local folder (first-time CoreML compilation can take a few minutes)
+            modelStatus = .loading
+            print("[Transcription] Loading model (first run may compile CoreML — this takes a few minutes)...")
+            let config = WhisperKitConfig(modelFolder: modelFolder.path)
             let kit = try await WhisperKit(config)
             self.whisperKit = kit
             modelStatus = .ready
