@@ -1,15 +1,17 @@
 import AppKit
+import SwiftUI
 
 /// Manages the status bar item in the macOS menu bar.
 @MainActor
-final class MenuBarController {
+final class MenuBarController: NSObject {
     private let statusItem: NSStatusItem
     private weak var transcriptionService: TranscriptionService?
 
     init(transcriptionService: TranscriptionService? = nil) {
         self.transcriptionService = transcriptionService
-
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        super.init()
+
         statusItem.button?.image = NSImage(systemSymbolName: "mic", accessibilityDescription: "VoxType")
         statusItem.button?.image?.size = NSSize(width: 18, height: 18)
 
@@ -44,22 +46,30 @@ final class MenuBarController {
 
         // If model failed, add open settings action
         if case .failed = transcriptionService?.modelStatus {
-            let retryItem = NSMenuItem(
-                title: "Open Settings to Fix...",
-                action: #selector(openSettings),
-                keyEquivalent: ""
+            let retryItem = NSMenuItem()
+            let retryLink = NSHostingView(
+                rootView: SettingsLink {
+                    Text("Open Settings to Fix...")
+                        .font(.system(size: 13))
+                }
             )
+            retryLink.frame = NSRect(x: 0, y: 0, width: 200, height: 24)
+            retryItem.view = retryLink
             menu.addItem(retryItem)
         }
 
         menu.addItem(NSMenuItem.separator())
 
-        // Settings
-        let settingsItem = NSMenuItem(
-            title: "Settings...",
-            action: #selector(openSettings),
-            keyEquivalent: ","
+        // Settings — use SettingsLink to properly open SwiftUI Settings scene
+        let settingsItem = NSMenuItem()
+        let settingsLink = NSHostingView(
+            rootView: SettingsLink {
+                Text("Settings...")
+                    .font(.system(size: 13))
+            }
         )
+        settingsLink.frame = NSRect(x: 0, y: 0, width: 200, height: 24)
+        settingsItem.view = settingsLink
         menu.addItem(settingsItem)
 
         // About
@@ -68,6 +78,7 @@ final class MenuBarController {
             action: #selector(showAbout),
             keyEquivalent: ""
         )
+        aboutItem.target = self
         menu.addItem(aboutItem)
 
         menu.addItem(NSMenuItem.separator())
@@ -80,11 +91,6 @@ final class MenuBarController {
         ))
 
         self.statusItem.menu = menu
-    }
-
-    @objc private func openSettings() {
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func showAbout() {
