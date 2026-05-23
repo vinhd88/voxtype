@@ -57,6 +57,7 @@ class TranscriptionService: ObservableObject {
 
     private var whisperKit: WhisperKit?
     private(set) var currentModelId: String = WhisperModel.defaultModel.id
+    private weak var settings: SettingsStore?
 
     enum ModelStatus: Equatable {
         case notLoaded
@@ -66,7 +67,12 @@ class TranscriptionService: ObservableObject {
         case failed(String)
     }
 
-    /// Download and load a WhisperKit model. No-op if the same model is already ready.
+    /// Configure with settings for model path persistence.
+    func configure(settings: SettingsStore) {
+        self.settings = settings
+    }
+
+    /// Download and load a WhisperKit model. Skips download if model exists on disk.
     func prepareModel(named modelId: String? = nil) async {
         let targetId = modelId ?? WhisperModel.defaultModel.id
 
@@ -76,19 +82,28 @@ class TranscriptionService: ObservableObject {
         currentModelId = targetId
 
         do {
-            modelStatus = .downloading
-            downloadProgress = 0.0
+            // Check for previously downloaded model on disk before downloading
+            let modelFolder: URL
+            if let cachedPath = existingModelPath(for: targetId) {
+                modelFolder = cachedPath
+            } else {
+                modelStatus = .downloading
+                downloadProgress = 0.0
 
-            let modelFolder = try await WhisperKit.download(
-                variant: targetId,
-                progressCallback: { [weak self] progress in
-                    guard progress.totalUnitCount > 0 else { return }
-                    let fraction = Double(progress.completedUnitCount) / Double(progress.totalUnitCount)
-                    Task { @MainActor [weak self] in
-                        self?.downloadProgress = fraction
+                modelFolder = try await WhisperKit.download(
+                    variant: targetId,
+                    progressCallback: { [weak self] progress in
+                        guard progress.totalUnitCount > 0 else { return }
+                        let fraction = Double(progress.completedUnitCount) / Double(progress.totalUnitCount)
+                        Task { @MainActor [weak self] in
+                            self?.downloadProgress = fraction
+                        }
                     }
-                }
-            )
+                )
+
+                // Persist the model folder path for future launches
+                settings?.modelFolderPath = modelFolder.path
+            }
 
             modelStatus = .loading
             downloadProgress = 1.0
@@ -100,6 +115,46 @@ class TranscriptionService: ObservableObject {
         } catch {
             modelStatus = .failed(error.localizedDescription)
         }
+    }
+
+    /// Check if a model already exists on disk (from a previous download).
+    private func existingModelPath(for modelId: String) -> URL? {
+        let fm = FileManager.default
+
+        // 1. Check persisted path — but only if it matches the requested model
+        if let saved = settings?.modelFolderPath, !saved.isEmpty {
+            let url = URL(fileURLWithPath: saved)
+            if url.lastPathComponent == modelId, let valid = isValidModelDirectory(url) {
+                return valid
+            }
+        }
+
+        // 2. Check HuggingFace default storage (~/Documents/huggingface/models/)
+        let defaultPath = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent("Documents/huggingface/models/argmaxinc/whisperkit-coreml")
+        let modelDir = defaultPath.appendingPathComponent(modelId)
+        if let valid = isValidModelDirectory(modelDir) {
+            // Persist for faster lookup next time
+            settings?.modelFolderPath = modelDir.path
+            return valid
+        }
+
+        return nil
+    }
+
+    /// Validate that a directory contains WhisperKit model files (.mlmodelc bundles).
+    private func isValidModelDirectory(_ url: URL) -> URL? {
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else {
+            return nil
+        }
+        // A valid model has at least one .mlmodelc bundle
+        guard let contents = try? fm.contentsOfDirectory(atPath: url.path),
+              contents.contains(where: { $0.hasSuffix(".mlmodelc") }) else {
+            return nil
+        }
+        return url
     }
 
     /// Transcribe PCM audio buffer to text.

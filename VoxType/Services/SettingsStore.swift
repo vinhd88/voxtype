@@ -26,6 +26,9 @@ final class SettingsStore: ObservableObject {
     // Model selection
     @AppStorage("selectedModel") var selectedModel: String = WhisperModel.defaultModel.id
 
+    // Persisted model folder path from WhisperKit download (avoids re-downloading)
+    @AppStorage("modelFolderPath") var modelFolderPath: String = ""
+
     // Computed: human-readable hotkey name
     var hotkeyDisplayName: String {
         let keyCode = CGKeyCode(hotkeyKeyCode)
