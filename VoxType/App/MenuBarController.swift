@@ -95,10 +95,23 @@ final class MenuBarController: NSObject {
     }
 
     @objc private func showAbout() {
+        let credits = NSAttributedString(
+            string: "Created by Vinh Duong\nvinhd88@gmail.com",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: {
+                    let ps = NSMutableParagraphStyle()
+                    ps.alignment = .center
+                    return ps
+                }(),
+            ]
+        )
         NSApp.orderFrontStandardAboutPanel(
             options: [
                 .applicationName: "VoxType",
                 .applicationVersion: "1.0.0",
+                .credits: credits,
             ]
         )
     }

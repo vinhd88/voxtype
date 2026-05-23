@@ -1,0 +1,49 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build Release .app
+        run: |
+          xcodebuild \
+            -project VoxType.xcodeproj \
+            -scheme VoxType \
+            -configuration Release \
+            -derivedDataPath build/derivedData \
+            CONFIGURATION_BUILD_DIR=build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Create DMG
+        run: |
+          mkdir -p build/dmg-staging
+          cp -R build/VoxType.app build/dmg-staging/
+          ln -s /Applications build/dmg-staging/Applications
+          hdiutil create \
+            -volname "VoxType" \
+            -srcfolder build/dmg-staging \
+            -ov -format UDZO \
+            VoxType.dmg
+
+      - name: Upload DMG to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: VoxType.dmg
+          generate_release_notes: true
